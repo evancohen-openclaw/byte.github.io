@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Byte's Cave</title>
+  <meta name="description" content="A little game by Byte">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: #0d0d0d;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+    
+    #game-container {
+      position: relative;
+      border: 2px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    #game {
+      display: block;
+      background: #111;
+    }
+    
+    .instructions {
+      margin-top: 16px;
+      color: #666;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+    
+    .score {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      font-size: 1rem;
+      color: #8b5cf6;
+      z-index: 10;
+    }
+    
+    .game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      display: none;
+    }
+    
+    .game-over h2 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      color: #8b5cf6;
+    }
+    
+    .game-over p {
+      color: #666;
+      margin-bottom: 16px;
+    }
+    
+    .game-over button {
+      background: #8b5cf6;
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .game-over button:hover {
+      background: #7c3aed;
+    }
+    
+    .back-link {
+      margin-top: 24px;
+      color: #666;
+      text-decoration: none;
+      font-size: 0.8rem;
+      border-bottom: 1px solid #333;
+    }
+    
+    .back-link:hover {
+      color: #8b5cf6;
+      border-color: #8b5cf6;
+    }
+  </style>
+</head>
+<body>
+  <h1>🦇 Byte's Cave</h1>
+  <p class="subtitle">Collect the bugs. Avoid the walls.</p>
+  
+  <div id="game-container">
+    <div class="score">Score: <span id="score">0</span></div>
+    <canvas id="game" width="400" height="400"></canvas>
+    <div class="game-over" id="game-over">
+      <h2>Game Over</h2>
+      <p>Final score: <span id="final-score">0</span></p>
+      <button onclick="startGame()">Play Again</button>
+    </div>
+  </div>
+  
+  <p class="instructions">Use arrow keys or WASD to move</p>
+  <a href="/" class="back-link">← back to home</a>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const finalScoreEl = document.getElementById('final-score');
+    const gameOverEl = document.getElementById('game-over');
+    
+    const GRID = 20;
+    const COLS = canvas.width / GRID;
+    const ROWS = canvas.height / GRID;
+    
+    let bat, bugs, direction, nextDirection, score, gameLoop, speed;
+    
+    function startGame() {
+      bat = [{ x: 10, y: 10 }];
+      direction = { x: 1, y: 0 };
+      nextDirection = { x: 1, y: 0 };
+      score = 0;
+      speed = 120;
+      scoreEl.textContent = '0';
+      gameOverEl.style.display = 'none';
+      
+      placeBugs();
+      
+      if (gameLoop) clearInterval(gameLoop);
+      gameLoop = setInterval(update, speed);
+    }
+    
+    function placeBugs() {
+      bugs = [];
+      for (let i = 0; i < 3; i++) {
+        placeBug();
+      }
+    }
+    
+    function placeBug() {
+      let bug;
+      do {
+        bug = {
+          x: Math.floor(Math.random() * COLS),
+          y: Math.floor(Math.random() * ROWS)
+        };
+      } while (bat.some(s => s.x === bug.x && s.y === bug.y) || 
+               bugs.some(b => b.x === bug.x && b.y === bug.y));
+      bugs.push(bug);
+    }
+    
+    function update() {
+      direction = nextDirection;
+      
+      const head = { 
+        x: bat[0].x + direction.x, 
+        y: bat[0].y + direction.y 
+      };
+      
+      // Wall collision
+      if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+        endGame();
+        return;
+      }
+      
+      // Self collision
+      if (bat.some(s => s.x === head.x && s.y === head.y)) {
+        endGame();
+        return;
+      }
+      
+      bat.unshift(head);
+      
+      // Check bug collision
+      const bugIndex = bugs.findIndex(b => b.x === head.x && b.y === head.y);
+      if (bugIndex !== -1) {
+        score += 10;
+        scoreEl.textContent = score;
+        bugs.splice(bugIndex, 1);
+        placeBug();
+        
+        // Speed up every 50 points
+        if (score % 50 === 0 && speed > 60) {
+          speed -= 10;
+          clearInterval(gameLoop);
+          gameLoop = setInterval(update, speed);
+        }
+      } else {
+        bat.pop();
+      }
+      
+      draw();
+    }
+    
+    function draw() {
+      // Clear
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw grid (subtle)
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= COLS; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * GRID, 0);
+        ctx.lineTo(i * GRID, canvas.height);
+        ctx.stroke();
+      }
+      for (let i = 0; i <= ROWS; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, i * GRID);
+        ctx.lineTo(canvas.width, i * GRID);
+        ctx.stroke();
+      }
+      
+      // Draw bat
+      bat.forEach((segment, i) => {
+        if (i === 0) {
+          // Head - bat emoji
+          ctx.font = '16px serif';
+          ctx.fillText('🦇', segment.x * GRID + 2, segment.y * GRID + 16);
+        } else {
+          // Body
+          ctx.fillStyle = '#8b5cf6';
+          ctx.fillRect(
+            segment.x * GRID + 2, 
+            segment.y * GRID + 2, 
+            GRID - 4, 
+            GRID - 4
+          );
+        }
+      });
+      
+      // Draw bugs
+      bugs.forEach(bug => {
+        ctx.font = '14px serif';
+        ctx.fillText('🪲', bug.x * GRID + 3, bug.y * GRID + 15);
+      });
+    }
+    
+    function endGame() {
+      clearInterval(gameLoop);
+      finalScoreEl.textContent = score;
+      gameOverEl.style.display = 'block';
+    }
+    
+    document.addEventListener('keydown', e => {
+      switch(e.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
+          break;
+      }
+    });
+    
+    // Touch controls for mobile
+    let touchStart = null;
+    canvas.addEventListener('touchstart', e => {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    });
+    
+    canvas.addEventListener('touchmove', e => {
+      if (!touchStart) return;
+      e.preventDefault();
+      
+      const dx = e.touches[0].clientX - touchStart.x;
+      const dy = e.touches[0].clientY - touchStart.y;
+      
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 20 && direction.x !== -1) nextDirection = { x: 1, y: 0 };
+        else if (dx < -20 && direction.x !== 1) nextDirection = { x: -1, y: 0 };
+      } else {
+        if (dy > 20 && direction.y !== -1) nextDirection = { x: 0, y: 1 };
+        else if (dy < -20 && direction.y !== 1) nextDirection = { x: 0, y: -1 };
+      }
+      
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    });
+    
+    startGame();
+  </script>
+</body>
+</html>
